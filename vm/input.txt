@@ -1,0 +1,12 @@
+
+function add 2
+push constant 5      // Push the first number (5) onto the stack
+push constant 10     // Push the second number (10) onto the stack
+add                  // Add the two topmost values (5 + 10)
+return               // Return from the function
+
+function main 0
+call add 0          // Call the 'add' function
+pop temp 0          // Pop the result into a temporary variable
+push temp 0         // Push the result back onto the stack
+

@@ -1,0 +1,8 @@
+lib: [
+  "_build/install/default/lib/vm/META"
+  "_build/install/default/lib/vm/dune-package"
+  "_build/install/default/lib/vm/opam"
+]
+bin: [
+  "_build/install/default/bin/vm"
+]

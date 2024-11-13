@@ -193,7 +193,7 @@ let resolve_function name num_locals =
 
   function_label :: init_locals  (* Ensure we return LInstr here *)
 
-  
+
 let resolve_call function_name num_args =
   let return_label = generate_label "RETURN_" in
   [
@@ -238,14 +238,6 @@ let resolve_call function_name num_args =
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
     AInstr (ASymbol "SP");
     CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
-  
-     (* ARG = SP - num_args - 5 *) (*<---changes can be made here--->*)
-    AInstr (AConstant (num_args + 5));
-    CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
-    AInstr (ASymbol "SP");
-    CInstr { dest = Some "D"; comp = "M-D"; jump = None; metadata = None };
-    AInstr (ASymbol "ARG");
-    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
     (* LCL = SP *)
     AInstr (ASymbol "SP");
@@ -253,6 +245,14 @@ let resolve_call function_name num_args =
     AInstr (ASymbol "LCL");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
   
+     (* ARG = SP - num_args - 5 *) (*<---changes can be made here--->*)
+    AInstr (AConstant (num_args + 4));
+    CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "D"; comp = "M-D"; jump = None; metadata = None };
+    AInstr (ASymbol "ARG");
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+    
     (* Jump to the function *)
     AInstr (ASymbol function_name);
     CInstr { dest = None; comp = "0"; jump = Some "JMP"; metadata = None };
@@ -267,14 +267,14 @@ let resolve_return =
     (* endFrame = LCL *)
     AInstr (ASymbol "LCL");
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
-    AInstr (AConstant 13);
+    AInstr (ASymbol "R13");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
     (* returnAddress = *(endFrame - 5) *)
     AInstr (AConstant 5);
     CInstr { dest = Some "A"; comp = "D-A"; jump = None; metadata = None };
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
-    AInstr (AConstant 14);
+    AInstr (ASymbol "R14");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
     (* *ARG = pop() *)
@@ -293,37 +293,38 @@ let resolve_return =
     CInstr { dest = Some "M"; comp = "D+1"; jump = None; metadata = None };
 
     (* Restore THAT, THIS, ARG, LCL *)
-    AInstr (AConstant 13);
+    AInstr (ASymbol "R13");
     CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "THAT");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
-    AInstr (AConstant 13);
+    AInstr (ASymbol "R13");
     CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "THIS");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
-    AInstr (AConstant 13);
+    AInstr (ASymbol "R13");
     CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "ARG");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
-    AInstr (AConstant 13);
+    AInstr (ASymbol "R13");
     CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "LCL");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
     (* Jump to return address *)
-    AInstr (AConstant 14);
+    AInstr (ASymbol "R14");
     CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
     CInstr { dest = None; comp = "0"; jump = Some "JMP"; metadata = None }; 
 
   ]
 
+(* Define the types for VM commands *)
 
 type vm_command =
   | FunctionCommand of function_command
@@ -331,6 +332,72 @@ type vm_command =
   | MemoryCommand of memory_command * string * int
   | ProgramFlowCommand of program_flow_command
 
+(* Function to initialize the stack pointer and call Sys.init *)
+let initialize_and_call_sys_init () =
+  let return_label = generate_label "Sys.init$ret" in
+  [
+    (* Set SP to 256 *)
+    AInstr (AConstant 256);
+    CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+
+    (* Call Sys.init *)
+    AInstr (ASymbol return_label);
+    CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
+
+    (* Save LCL, ARG, THIS, THAT on the stack *)
+    AInstr (ASymbol "LCL");
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
+
+    AInstr (ASymbol "ARG");
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
+
+    AInstr (ASymbol "THIS");
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
+
+    AInstr (ASymbol "THAT");
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
+
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
+    AInstr (ASymbol "LCL");
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+
+    (* Jump to Sys.init *)
+    AInstr (ASymbol "Sys.init");
+    CInstr { dest = None; comp = "0"; jump = Some "JMP"; metadata = None };
+
+    (* Return label *)
+    AInstr (ASymbol return_label)
+  ]
+
+(* Function to translate a single VM command *)
 let translate_vm_command = function
   | FunctionCommand cmd -> 
       (match cmd with
@@ -345,5 +412,11 @@ let translate_vm_command = function
       match command with
       | Push -> resolve_push segment index  
       | Pop -> resolve_pop segment index 
-     
+
+(* Function to translate a list of VM commands with initial Sys.init setup *)
+let translate_vm_commands commands =
+  let sys_init_setup = initialize_and_call_sys_init () in
+  let translated_commands = List.concat_map translate_vm_command commands in
+  sys_init_setup @ translated_commands
+
 end

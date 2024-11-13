@@ -56,7 +56,7 @@ let translate_vm_commands_with_sys_init_and_exit commands =
 let process_vm_lines lines =
   lines
   |> List.filter (fun line -> line <> "" && not (String.starts_with ~prefix:"//" line)) (* Remove empty/comment lines *)
-  |> List.map parse_line (* Parse each line into a VM command *)
+  |> List.filter_map parse_line (* Parse each line and remove None values *)
   |> translate_vm_commands_with_sys_init_and_exit (* Translate commands with optional Sys.init and exit *)
   |> List.map instruction_to_string (* Convert instructions to strings *)
 

@@ -111,6 +111,17 @@ let resolve_push segment index =
         AInstr (ASymbol "SP");
         CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
       ]
+  | "static" -> 
+  let static_address = 16 + index in
+  [
+    AInstr (AConstant static_address);     (* Load static address (16 + index) *)
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None }; (* D = M[static_address] *)
+    AInstr (ASymbol "SP");                 (* Load SP into A register *)
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None }; (* A = SP *)
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None }; (* M[SP] = D *)
+    AInstr (ASymbol "SP");                 (* Load SP into A register again *)
+    CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None }; (* SP = SP + 1 *)
+  ]
   | _ -> failwith "Unsupported segment for push"
 
 let resolve_pop segment index =
@@ -127,12 +138,12 @@ let resolve_pop segment index =
         CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
         AInstr (AConstant index);
         CInstr { dest = Some "D"; comp = "D+A"; jump = None; metadata = None };
-        AInstr (AConstant 13);
+        AInstr (ASymbol "R13");
         CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
         AInstr (ASymbol "SP");
         CInstr { dest = Some "A"; comp = "M-1"; jump = None; metadata = None };
         CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
-        AInstr (AConstant 13);
+        AInstr (ASymbol "R13");
         CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
         CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
         AInstr (ASymbol "SP");
@@ -148,16 +159,32 @@ let resolve_pop segment index =
         AInstr (ASymbol "SP");
         CInstr { dest = Some "M"; comp = "M-1"; jump = None; metadata = None };
       ]
-  | "pointer" ->
-      let pointer_address = if index = 0 then "THIS" else "THAT" in [
-        AInstr (ASymbol "SP");
-        CInstr { dest = Some "A"; comp = "M-1"; jump = None; metadata = None };
-        CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
-        AInstr (ASymbol pointer_address);
-        CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
-        AInstr (ASymbol "SP");
-        CInstr { dest = Some "M"; comp = "M-1"; jump = None; metadata = None };
-      ]
+    | "pointer" ->
+    let pointer_address = if index = 0 then "R3" else "R4" in
+    [
+      AInstr (ASymbol pointer_address);                             (* Load SP into A register *)
+      CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None }; (* A = SP - 1 *)
+      AInstr (ASymbol "R13");                  (* Load pointer address (THIS or THAT) *)
+      CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None }; (* M = D (store in pointer) *)
+      AInstr (ASymbol "SP");                             (* Load SP into A register again *)
+      CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None }; (* SP = SP - 1 *)
+      CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None }; (* SP = SP - 1 *)
+      AInstr (ASymbol "R13");                  (* Load pointer address (THIS or THAT) *)
+      CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None }; (* M = D (store in pointer) *)
+      CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None }; (* M = D (store in pointer) *)
+    ]
+    | "static" -> 
+    let static_address = 16 + index in [
+      AInstr (AConstant static_address);    (* Load static address (16 + index) *)
+      CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };  (* A = static_address *)
+      CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };  (* D = M[static_address] *)
+      AInstr (ASymbol "SP");                (* Load SP into A register *)
+      CInstr { dest = Some "A"; comp = "M-1"; jump = None; metadata = None }; (* A = SP - 1 *)
+      CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };  (* M[SP-1] = D *)
+      AInstr (ASymbol "SP");                (* Load SP into A register again *)
+      CInstr { dest = Some "M"; comp = "M-1"; jump = None; metadata = None }; (* SP = SP - 1 *)
+    ]
+  
   | _ -> failwith "Unsupported segment for pop"
 
 let vm_pf_command= function
@@ -246,7 +273,7 @@ let resolve_call function_name num_args =
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
   
      (* ARG = SP - num_args - 5 *) (*<---changes can be made here--->*)
-    AInstr (AConstant (num_args + 4));
+    AInstr (AConstant (num_args + 5));
     CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
     AInstr (ASymbol "SP");
     CInstr { dest = Some "D"; comp = "M-D"; jump = None; metadata = None };
@@ -387,6 +414,13 @@ let initialize_and_call_sys_init () =
     AInstr (ASymbol "SP");
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "LCL");
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+
+    AInstr (AConstant 5);
+    CInstr { dest = Some "D"; comp = "D-A"; jump = None; metadata = None };
+    AInstr (AConstant 0);
+    CInstr { dest = Some "D"; comp = "D-A"; jump = None; metadata = None };
+    AInstr (ASymbol "ARG");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
     (* Jump to Sys.init *)

@@ -162,37 +162,38 @@ let resolve_pop segment index =
 
 let vm_pf_command= function
   | Label label_name ->
-    [ AInstr (ASymbol label_name) ]
+    [ LInstr (LSymbol label_name)]
   | Goto label_name ->
     [ AInstr (ASymbol label_name); CInstr { dest = None; comp = "0"; jump = Some "JMP"; metadata = None } ]
   | IfGoto label_name ->
     [
       AInstr (ASymbol "SP");  
-        CInstr { dest = Some "A"; comp = "M-1"; jump = None; metadata = None }; 
-        CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };   
-        AInstr (ASymbol label_name);  
-        CInstr { dest = None; comp = "D"; jump = Some "JNE"; metadata = None }; 
-        AInstr (ASymbol "SP");
-        CInstr { dest = Some "M"; comp = "M-1"; jump = None; metadata = None };  
+      CInstr { dest = Some "A"; comp = "M-1"; jump = None; metadata = None }; 
+      CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };   
+      AInstr (ASymbol label_name);  
+      CInstr { dest = None; comp = "D"; jump = Some "JNE"; metadata = None }; 
+      AInstr (ASymbol "SP");
+      CInstr { dest = Some "M"; comp = "M-1"; jump = None; metadata = None };  
     ]
 
 let resolve_function name num_locals =
-  let init_locals = 
-    List.init num_locals (fun _ -> 
-      [
-        AInstr (AConstant 0); (* Push 0 onto the stack (initial value for a local variable) *)
-        CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
-        AInstr (ASymbol "SP"); (* Set A to SP *)
-        CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
-        CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None }; (* Store 0 in local *)
-        AInstr (ASymbol "SP");
-        CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None }; (* Increment SP *)
-      ]
-    ) |> List.concat
-  in
-  [ AInstr (ASymbol name) ] @ init_locals
-    
+  let function_label = LInstr (LSymbol name) in  (* Wrap the name as LSymbol within LInstr *)
 
+  let init_local () = [
+    AInstr (AConstant 0);                                
+    CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
+    AInstr (ASymbol "SP");                               
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None }; 
+    AInstr (ASymbol "SP");
+    CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None }; 
+  ] in
+
+  let init_locals = List.init num_locals (fun _ -> init_local ()) |> List.concat in
+
+  function_label :: init_locals  (* Ensure we return LInstr here *)
+
+  
 let resolve_call function_name num_args =
   let return_label = generate_label "RETURN_" in
   [
@@ -238,14 +239,14 @@ let resolve_call function_name num_args =
     AInstr (ASymbol "SP");
     CInstr { dest = Some "M"; comp = "M+1"; jump = None; metadata = None };
   
-    (* ARG = SP - num_args - 5 *)
+     (* ARG = SP - num_args - 5 *) (*<---changes can be made here--->*)
     AInstr (AConstant (num_args + 5));
     CInstr { dest = Some "D"; comp = "A"; jump = None; metadata = None };
     AInstr (ASymbol "SP");
     CInstr { dest = Some "D"; comp = "M-D"; jump = None; metadata = None };
     AInstr (ASymbol "ARG");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
-  
+
     (* LCL = SP *)
     AInstr (ASymbol "SP");
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
@@ -278,7 +279,8 @@ let resolve_return =
 
     (* *ARG = pop() *)
     AInstr (ASymbol "SP");
-    CInstr { dest = Some "A"; comp = "M-1"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "M-1"; jump = None; metadata = None };  (*changed a=m-1 to am=m-1*)
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };  (*changed a=m-1 to am=m-1*)
     CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "ARG");
     CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
@@ -286,34 +288,40 @@ let resolve_return =
 
     (* SP = ARG + 1 *)
     AInstr (ASymbol "ARG");
-    CInstr { dest = Some "D"; comp = "M+1"; jump = None; metadata = None };
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "SP");
-    CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
+    CInstr { dest = Some "M"; comp = "D+1"; jump = None; metadata = None };
 
     (* Restore THAT, THIS, ARG, LCL *)
-    AInstr (AConstant 1);
-    CInstr { dest = Some "D"; comp = "A-D"; jump = None; metadata = None };
+    AInstr (AConstant 13);
+    CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "THAT");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
-    AInstr (AConstant 2);
-    CInstr { dest = Some "D"; comp = "A-D"; jump = None; metadata = None };
+    AInstr (AConstant 13);
+    CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "THIS");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
-    AInstr (AConstant 3);
-    CInstr { dest = Some "D"; comp = "A-D"; jump = None; metadata = None };
+    AInstr (AConstant 13);
+    CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "ARG");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
-    AInstr (AConstant 4);
-    CInstr { dest = Some "D"; comp = "A-D"; jump = None; metadata = None };
+    AInstr (AConstant 13);
+    CInstr { dest = Some "AM"; comp = "M-1"; jump = None; metadata = None };
+    CInstr { dest = Some "D"; comp = "M"; jump = None; metadata = None };
     AInstr (ASymbol "LCL");
     CInstr { dest = Some "M"; comp = "D"; jump = None; metadata = None };
 
     (* Jump to return address *)
     AInstr (AConstant 14);
-    CInstr { dest = None; comp = "0"; jump = Some "JMP"; metadata = None }
+    CInstr { dest = Some "A"; comp = "M"; jump = None; metadata = None };
+    CInstr { dest = None; comp = "0"; jump = Some "JMP"; metadata = None }; 
+
   ]
 
 
@@ -321,6 +329,7 @@ type vm_command =
   | FunctionCommand of function_command
   | ArithmeticCommand of arithmetic_command
   | MemoryCommand of memory_command * string * int
+  | ProgramFlowCommand of program_flow_command
 
 let translate_vm_command = function
   | FunctionCommand cmd -> 
@@ -330,10 +339,11 @@ let translate_vm_command = function
       | Return -> resolve_return)
   | ArithmeticCommand cmd -> 
       vm_arithmetic_command cmd
+  | ProgramFlowCommand cmd -> 
+      vm_pf_command cmd
   | MemoryCommand (command, segment, index) ->
       match command with
       | Push -> resolve_push segment index  
       | Pop -> resolve_pop segment index 
-
-
-  end
+     
+end
